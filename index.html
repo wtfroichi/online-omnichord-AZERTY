@@ -1,1 +1,117 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name="theme-color" content="#000000"><link rel="manifest" href="./manifest.json"><link rel="shortcut icon" href="./favicon.ico"><title>Online Omnichord</title><link href="./static/css/main.190b7b7e.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div><script type="text/javascript" src="./static/js/main.b90cb5b2.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no">
+		<meta name="theme-color" content="#000000">
+		<link rel="manifest" href="./manifest.json">
+		<link rel="shortcut icon" href="./favicon.ico">
+		<title>Online Omnichord</title>
+		<link href="./static/css/main.190b7b7e.css" rel="stylesheet">
+	</head>
+	<body>
+		<noscript>You need to enable JavaScript to run this app.</noscript>
+		<div id="root"></div>
+		<script>
+			(function(){
+				function codeToQwerty(code){
+					if(!code) return null;
+					if(code.indexOf('Key')===0) return code.slice(3).toLowerCase();
+					if(code.indexOf('Digit')===0) return code.slice(5);
+					var punct = {Comma:',',Period:'.',Slash:'/',Minus:'-',Equal:'='};
+					return punct[code]||null;
+				}
+				function remap(e){
+					try{
+						var mapped = codeToQwerty(e.code) || e.key;
+						if(mapped === e.key) return; // nothing to change
+						e.preventDefault(); e.stopImmediatePropagation();
+
+						var fake = {
+							key: mapped,
+							code: e.code,
+							location: e.location,
+							ctrlKey: e.ctrlKey,
+							shiftKey: e.shiftKey,
+							altKey: e.altKey,
+							metaKey: e.metaKey,
+							repeat: e.repeat,
+							keyCode: typeof e.keyCode === 'number' ? e.keyCode : (mapped && mapped.length?mapped.charCodeAt(0):0)
+						};
+
+						var winHandler = window['on' + e.type];
+						if(typeof winHandler === 'function'){
+							// call the app's global handler directly with the adjusted key
+							try{ winHandler(fake); return; }catch(_){ /* fallthrough to dispatch */ }
+						}
+
+						// Fallback: dispatch a synthetic KeyboardEvent on window
+						var ev;
+						try{
+							ev = new KeyboardEvent(e.type, {key: mapped, code: e.code, location: e.location, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey, repeat: e.repeat, bubbles:true, cancelable:true});
+							try{ Object.defineProperty(ev, 'keyCode', {get:function(){return fake.keyCode}}); }catch(_){ }
+						}catch(_){ ev = null }
+						(window).dispatchEvent(ev || e);
+					}catch(_){ }
+				}
+				window.addEventListener('keydown', remap, true);
+				window.addEventListener('keyup', remap, true);
+			})();
+		</script>
+		<script type="text/javascript" src="./static/js/main.b90cb5b2.js"></script>
+		<script>
+			(function(){
+				function mapCodeToKey(code){
+					if(!code) return null;
+					if(code.indexOf('Key')===0) return code.slice(3).toLowerCase();
+					if(code.indexOf('Digit')===0) return code.slice(5);
+					if(code==='Comma') return ',';
+					if(code==='Period') return '.';
+					if(code==='Minus') return '-';
+					if(code==='Equal') return '=';
+					return null;
+				}
+
+				function wrap(name){
+					var orig = window[name];
+					if(typeof orig !== 'function') return;
+					window[name] = function(e){
+						try{
+							var k = mapCodeToKey(e && e.code) || e.key;
+							if(k === e.key) return orig.call(this,e);
+							var fake = Object.create(e);
+							try{ fake.key = k; }catch(_){}
+							try{ fake.keyCode = k && k.length===1 ? k.charCodeAt(0) : e.keyCode; }catch(_){ }
+							return orig.call(this, fake );
+						}catch(err){ return orig.call(this,e); }
+					};
+				}
+
+				// Try wrapping after a short delay in case the app rebinds.
+				setTimeout(function(){ wrap('onkeydown'); wrap('onkeyup'); }, 50);
+				setTimeout(function(){ wrap('onkeydown'); wrap('onkeyup'); }, 500);
+
+				// Also monkey-patch addEventListener to wrap any keyboard listeners the app registers
+				var origAdd = EventTarget.prototype.addEventListener;
+				EventTarget.prototype.addEventListener = function(type, listener, options){
+					if((type==='keydown' || type==='keyup') && typeof listener === 'function'){
+						var wrapped = function(e){
+							try{
+								var k = mapCodeToKey(e && e.code) || e.key;
+								if(k === e.key) return listener.call(this, e);
+								var ev;
+								try{
+									ev = new KeyboardEvent(e.type, {key:k, code: e.code, location: e.location, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey, repeat: e.repeat, bubbles: true, cancelable: true});
+									try{ Object.defineProperty(ev, 'keyCode', {get:function(){return k && k.length===1?k.toUpperCase().charCodeAt(0):e.keyCode}}); }catch(_){ }
+								}catch(_){ ev = e; }
+								return listener.call(this, ev);
+							}catch(err){ return listener.call(this,e); }
+						};
+						return origAdd.call(this, type, wrapped, options);
+					}
+					return origAdd.call(this, type, listener, options);
+				};
+			})();
+		</script>
+	</body>
+</html>
